@@ -37,12 +37,13 @@ public final class WinterBackground {
         double t = Util.getMeasuringTimeMs() / 1000.0;
         if (w != lastW || h != lastH) { FLAKES.clear(); lastW = w; lastH = h; }
 
+        int q = ClickGuiModule.quality();
         // sky
         if (scenic) g.fillGradient(0, 0, w, h, 0xFF07122A, 0xFF21496F);
         else g.fillGradient(0, 0, w, h, 0x6A0B1F3A, 0x8A1C3F63);
 
         // stars
-        for (int i = 0; i < (scenic ? 90 : 40); i++) {
+        for (int i = 0; i < (q == 0 ? (scenic ? 90 : 40) : q == 1 ? (scenic ? 45 : 20) : 15); i++) {
             int sx = (int) ((i * 97L * 31 % 1000) / 1000.0 * w);
             int sy = (int) ((i * 53L * 17 % 1000) / 1000.0 * h * 0.55);
             float tw = (float) (0.5 + 0.5 * Math.sin(t * 1.5 + i));
@@ -63,14 +64,14 @@ public final class WinterBackground {
         }
 
         // aurora
-        if (ClickGuiModule.aurora()) {
-            int step = 4, mid = (int) (h * 0.28), bot = (int) (h * 0.62);
+        if (ClickGuiModule.aurora() && q < 2) {
+            int step = q == 0 ? 4 : 10, mid = (int) (h * 0.28), bot = (int) (h * 0.62);
             for (int x = 0; x < w; x += step) {
                 double w1 = Math.sin(x * 0.012 + t * 0.55), w2 = Math.sin(x * 0.027 - t * 0.8), w3 = Math.sin(x * 0.005 + t * 0.2);
                 double v = 0.5 + 0.5 * (0.55 * w1 + 0.3 * w2 + 0.15 * w3);
                 int a = (int) ((scenic ? 90 : 70) * v * v);
                 if (a < 4) continue;
-                float hue = 0.40f + 0.22f * (float) (0.5 + 0.5 * Math.sin(x * 0.006 + t * 0.3));
+                float hue = ClickGuiModule.baseHue() - 0.04f + 0.16f * (float) (0.5 + 0.5 * Math.sin(x * 0.006 + t * 0.3));
                 int rgb = MathHelper.hsvToRgb(hue, 0.65f, 1f) & 0xFFFFFF;
                 int y0 = (int) (mid - 40 + 25 * w1), y1 = (int) (bot - 40 + 30 * w2);
                 g.fillGradient(x, y0 / 2, x + step, y0 + (y1 - y0) / 3, rgb, (a << 24) | rgb);
@@ -80,26 +81,28 @@ public final class WinterBackground {
 
         // mountains
         if (scenic) {
+            int mstep = q == 0 ? 3 : q == 1 ? 6 : 10;
             for (int layer = 0; layer < 2; layer++) {
                 int top0 = layer == 0 ? 0xFF2C5680 : 0xFF183654;
-                for (int x = 0; x < w; x += 3) {
+                for (int x = 0; x < w; x += mstep) {
                     double m = h * (layer == 0 ? 0.34 : 0.24) + 26 * Math.sin(x * 0.006 + 0.5 + layer * 2) + 15 * Math.sin(x * 0.017 + 2 + layer) + 7 * Math.sin(x * 0.04);
                     int top = h - (int) m;
-                    g.fillGradient(x, top, x + 3, top + 10, 0xFFE4EFFB, top0);
-                    g.fillGradient(x, top + 10, x + 3, h, top0, layer == 0 ? 0xFF1B3B5C : 0xFF0F2540);
+                    g.fillGradient(x, top, x + mstep, top + 10, 0xFFE4EFFB, top0);
+                    g.fillGradient(x, top + 10, x + mstep, h, top0, layer == 0 ? 0xFF1B3B5C : 0xFF0F2540);
                 }
             }
         }
 
         // hills
-        for (int x = 0; x < w; x += 2) {
+        int hstep = q == 0 ? 2 : 4;
+        for (int x = 0; x < w; x += hstep) {
             int top = h - (int) hill(x, 1.3);
-            g.fillGradient(x, top, x + 2, h, 0xE0EAF4FF, 0xF0BFD8EE);
+            if (q == 0) g.fillGradient(x, top, x + hstep, h, 0xE0EAF4FF, 0xF0BFD8EE); else g.fill(x, top, x + hstep, h, 0xF0D4E6F8);
         }
 
         // pines
-        if (scenic) {
-            for (int i = 0; i * 26 < w + 26; i++) {
+        if (scenic && q < 2) {
+            for (int i = 0; i * 26 < w + 26; i += (q == 0 ? 1 : 2)) {
                 int x = i * 26 + (i * 37 % 13);
                 int hgt = 20 + (i * 53 % 4) * 7;
                 int base = h - (int) hill(x, 1.3) + 5;
@@ -112,14 +115,14 @@ public final class WinterBackground {
                 g.fill(x - 1, base, x + 1, base + 3, 0xFF2A1F1A);
             }
         }
-        for (int x = 0; x < w; x += 2) {
+        for (int x = 0; x < w; x += hstep) {
             double hh = 6 + 5 * Math.sin(x * 0.02 + 4) + 3 * Math.sin(x * 0.05);
             int top = h - (int) hh;
-            g.fillGradient(x, top, x + 2, h, 0xF2FFFFFF, 0xF2DCEBFA);
+            g.fill(x, top, x + hstep, h, 0xF2EEF6FF);
         }
 
         // snow
-        int target = ClickGuiModule.snowAmount();
+        int target = ClickGuiModule.snowAmount() * (q == 0 ? 10 : q == 1 ? 6 : 3) / 10;
         while (FLAKES.size() < target) FLAKES.add(newFlake(w, h, true));
         while (FLAKES.size() > target) FLAKES.remove(FLAKES.size() - 1);
         float speed = ClickGuiModule.snowSpeed();
@@ -140,8 +143,8 @@ public final class WinterBackground {
         }
 
         // frost vignette
-        int fw = 26;
-        for (int i = 0; i < fw; i += 2) {
+        int fw = q == 2 ? 0 : 26;
+        for (int i = 0; i < fw; i += 4) {
             int a = (int) (70 * (1 - i / (float) fw) * (1 - i / (float) fw));
             int col = (a << 24) | 0xCFE8FF;
             g.fill(i, 0, i + 2, h, col);
