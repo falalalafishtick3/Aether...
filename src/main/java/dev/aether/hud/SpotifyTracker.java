@@ -60,14 +60,21 @@ public final class SpotifyTracker {
     }
 
     private static void pollWindows() throws Exception {
-        String out = run("powershell", "-NoProfile", "-NonInteractive", "-Command",
-                "[Console]::OutputEncoding=[Text.Encoding]::UTF8;"
-              + "(Get-Process -Name Spotify -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle } | Select-Object -First 1 -ExpandProperty MainWindowTitle)");
-        if (out == null || out.isEmpty()) { running = false; playing = false; return; }
-        String t = out.lines().findFirst().orElse("").trim();
-        if (t.equals("Spotify") || t.startsWith("Spotify Free") || t.startsWith("Spotify Premium") || t.equals("Advertisement")) {
-            running = true; playing = false; return;
+        // tasklist is far lighter than spawning PowerShell; the last CSV column is the window title.
+        String out = run("tasklist", "/v", "/fi", "IMAGENAME eq Spotify.exe", "/fo", "csv", "/nh");
+        if (out == null || out.isEmpty() || !out.toLowerCase().contains("spotify.exe")) { running = false; playing = false; return; }
+        String t = "";
+        for (String line : out.split("\\r?\\n")) {
+            if (!line.toLowerCase().startsWith("\"spotify.exe\"")) continue;
+            int k = line.lastIndexOf("\",\"");
+            if (k < 0) continue;
+            String title = line.substring(k + 3).replaceAll("\"$", "").trim();
+            if (!title.isEmpty() && !title.equalsIgnoreCase("N/A") && !title.equals("Spotify") && !title.startsWith("Spotify Free")
+                    && !title.startsWith("Spotify Premium") && !title.contains("MSCTFIME") && !title.contains("Default IME") && !title.contains("GDI+")) {
+                t = title; break;
+            }
         }
+        if (t.isEmpty() || t.equals("Advertisement")) { running = true; playing = false; return; }
         int i = t.indexOf(" - ");
         if (i < 0) { set("", t, true, 0, 0, false); return; }
         set(t.substring(0, i), t.substring(i + 3), true, 0, 0, false);
