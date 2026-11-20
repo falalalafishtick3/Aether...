@@ -1,11 +1,13 @@
 package dev.aether.util;
 
+import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
 import net.minecraft.block.entity.*;
 import net.minecraft.world.chunk.ChunkSection;
 import net.minecraft.world.chunk.WorldChunk;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /** Scores a chunk by player-made block entities. Chunks with natural structures are flagged. */
 public final class BaseScan {
@@ -25,13 +27,16 @@ public final class BaseScan {
         return 0;
     }
 
-    private static boolean hasPurpur(WorldChunk c) {
+    public static final Predicate<BlockState> END_STRUCTURE = st -> st.isOf(Blocks.PURPUR_BLOCK) || st.isOf(Blocks.PURPUR_PILLAR);
+    public static final Predicate<BlockState> NETHER_STRUCTURE = st -> st.isOf(Blocks.NETHER_BRICKS) || st.isOf(Blocks.POLISHED_BLACKSTONE_BRICKS) || st.isOf(Blocks.GILDED_BLACKSTONE);
+
+    private static boolean hasMarker(WorldChunk c, Predicate<BlockState> marker) {
         for (ChunkSection s : c.getSectionArray())
-            if (s != null && !s.isEmpty() && s.hasAny(st -> st.isOf(Blocks.PURPUR_BLOCK) || st.isOf(Blocks.PURPUR_PILLAR))) return true;
+            if (s != null && !s.isEmpty() && s.hasAny(marker)) return true;
         return false;
     }
 
-    public static Result scan(WorldChunk c, int y0, int y1, boolean checkPurpur, int minScoreForPurpurCheck) {
+    public static Result scan(WorldChunk c, int y0, int y1, Predicate<BlockState> naturalMarker, int minScoreForMarkerCheck) {
         int score = 0, lo = Integer.MAX_VALUE, hi = Integer.MIN_VALUE;
         boolean natural = false;
         Set<Class<?>> types = new HashSet<>();
@@ -45,7 +50,7 @@ public final class BaseScan {
             score += w; types.add(be.getClass());
             lo = Math.min(lo, y); hi = Math.max(hi, y);
         }
-        if (checkPurpur && !natural && score >= minScoreForPurpurCheck && hasPurpur(c)) natural = true;
+        if (naturalMarker != null && !natural && score >= minScoreForMarkerCheck && hasMarker(c, naturalMarker)) natural = true;
         return new Result(score, types.size(), natural, lo, hi);
     }
 }
