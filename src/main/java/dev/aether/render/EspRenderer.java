@@ -9,7 +9,6 @@ import net.minecraft.client.render.*;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
-import net.minecraft.util.shape.VoxelShapes;
 import org.joml.Matrix4f;
 import java.util.List;
 
@@ -60,10 +59,11 @@ public final class EspRenderer {
 
     public static void outlines(MatrixStack m, VertexConsumerProvider buf, List<Item> items, boolean xray, float width) {
         VertexConsumer c = buf.getBuffer(xray ? L_LINES_XRAY : RenderLayers.lines());
+        Matrix4f mat = m.peek().getPositionMatrix();
         for (Item it : items) {
             if (it.outlineA() <= 0) continue;
             int argb = (Math.min(255, it.outlineA()) << 24) | it.rgb();
-            VertexRendering.drawOutline(m, c, VoxelShapes.cuboid(it.box()), 0, 0, 0, argb, width);
+            boxEdges(c, mat, it.box(), argb, width);
         }
     }
 
@@ -81,5 +81,25 @@ public final class EspRenderer {
             c.vertex(mat, (float) start.x, (float) start.y, (float) start.z).color(argb).normal(nx, ny, nz).lineWidth(width);
             c.vertex(mat, (float) e.x, (float) e.y, (float) e.z).color(argb).normal(nx, ny, nz).lineWidth(width);
         }
+    }
+
+    private static void edge(VertexConsumer c, Matrix4f mat, float x0, float y0, float z0, float x1, float y1, float z1, int argb, float w) {
+        float dx = x1 - x0, dy = y1 - y0, dz = z1 - z0;
+        float len = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (len < 1e-6f) return;
+        dx /= len; dy /= len; dz /= len;
+        c.vertex(mat, x0, y0, z0).color(argb).normal(dx, dy, dz).lineWidth(w);
+        c.vertex(mat, x1, y1, z1).color(argb).normal(dx, dy, dz).lineWidth(w);
+    }
+
+    /** 12 box edges written straight to the buffer (no per-box shape allocation). */
+    private static void boxEdges(VertexConsumer c, Matrix4f mat, Box b, int argb, float w) {
+        float x0 = (float) b.minX, y0 = (float) b.minY, z0 = (float) b.minZ, x1 = (float) b.maxX, y1 = (float) b.maxY, z1 = (float) b.maxZ;
+        edge(c, mat, x0, y0, z0, x1, y0, z0, argb, w); edge(c, mat, x0, y0, z1, x1, y0, z1, argb, w);
+        edge(c, mat, x0, y1, z0, x1, y1, z0, argb, w); edge(c, mat, x0, y1, z1, x1, y1, z1, argb, w);
+        edge(c, mat, x0, y0, z0, x0, y1, z0, argb, w); edge(c, mat, x1, y0, z0, x1, y1, z0, argb, w);
+        edge(c, mat, x0, y0, z1, x0, y1, z1, argb, w); edge(c, mat, x1, y0, z1, x1, y1, z1, argb, w);
+        edge(c, mat, x0, y0, z0, x0, y0, z1, argb, w); edge(c, mat, x1, y0, z0, x1, y0, z1, argb, w);
+        edge(c, mat, x0, y1, z0, x0, y1, z1, argb, w); edge(c, mat, x1, y1, z0, x1, y1, z1, argb, w);
     }
 }
