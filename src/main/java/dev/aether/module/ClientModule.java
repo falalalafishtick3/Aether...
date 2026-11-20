@@ -17,6 +17,7 @@ public abstract class ClientModule {
     /** GLFW key code, -1 = unbound. */
     public int key = -1;
     public boolean keyWasDown;
+    public boolean favorite;
     /** Toggle = press to switch on/off. Hold = active only while the key is held. */
     public final ModeSetting bindMode = new ModeSetting("Key Mode", "Toggle", "Hold");
 
