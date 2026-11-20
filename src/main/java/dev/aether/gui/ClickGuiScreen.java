@@ -7,6 +7,8 @@ import dev.aether.setting.*;
 import net.minecraft.client.input.CharInput;
 import net.minecraft.client.input.KeyInput;
 import net.minecraft.client.gui.Click;               // VERSION-SENSITIVE (1.21.9+ input events)
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.util.InputUtil;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.text.Text;
@@ -41,6 +43,7 @@ public class ClickGuiScreen extends Screen {
         if (panels == null) {
             panels = new ArrayList<>();
             int i = 0;
+            panels.add(new Panel(null, 12 + i++ * (W + 10), 64));   // Favorites
             for (Category c : Category.values()) panels.add(new Panel(c, 12 + i++ * (W + 10), 64));
         }
     }
@@ -56,6 +59,21 @@ public class ClickGuiScreen extends Screen {
         drawBanner(g);
         for (Panel p : panels) drawPanel(g, p, mx, my);
         drawSearch(g);
+        button(g, "Bases", 8, height - 30, 50, mx, my, () -> MinecraftClient.getInstance().setScreen(new HubScreen(0)));
+        button(g, "Waypoints", 62, height - 30, 64, mx, my, () -> MinecraftClient.getInstance().setScreen(new HubScreen(1)));
+        g.drawText(textRenderer, "Shift+click a module = favorite   |   Middle-click = keybind", 8, height - 12, 0x77FFFFFF, false);
+    }
+
+    private static boolean shiftDown() {
+        return InputUtil.isKeyPressed(MinecraftClient.getInstance().getWindow(), GLFW.GLFW_KEY_LEFT_SHIFT);
+    }
+
+    private void button(DrawContext g, String label, int x, int y, int w, int mx, int my, Runnable r) {
+        boolean hov = mx >= x && mx < x + w && my >= y && my < y + 16;
+        g.fill(x, y, x + w, y + 16, hov ? 0xE0202830 : 0xC0101218);
+        g.fill(x, y + 15, x + w, y + 16, ClickGuiModule.accent());
+        g.drawText(textRenderer, label, x + (w - textRenderer.getWidth(label)) / 2, y + 4, 0xFFFFFFFF, false);
+        hits.add(new Hit(x, y, w, 16, (a, b, btn) -> { if (btn == 0) r.run(); }, null));
     }
 
     // ---------------- title banner ----------------
@@ -107,7 +125,7 @@ public class ClickGuiScreen extends Screen {
         // side lines
         int cx = width / 2;
         int lineY = (int) (y + 12);
-        float baseHue = 0.46f + (float) Math.sin(t * 0.6) * 0.03f;
+        float baseHue = ClickGuiModule.baseHue() + (float) Math.sin(t * 0.6) * 0.03f;
         fadeLine(g, Math.max(8, cx - 230), (int) (x - 14), lineY, 1, baseHue, true);
         fadeLine(g, (int) (x + tw + 14), Math.min(width - 8, cx + 230), lineY, 1, baseHue, false);
         g.fill((int) (x - 10), lineY - 2, (int) (x - 8), lineY + 3, rgbArgb(baseHue, 0.5f, 1f, 255));
@@ -118,8 +136,8 @@ public class ClickGuiScreen extends Screen {
         float cursor = x;
         for (int i = 0; i < title.length(); i++) {
             String ch = String.valueOf(title.charAt(i));
-            float hue = 0.47f + 0.13f * (float) (0.5 + 0.5 * Math.sin(t * 1.4 + i * 0.75));
-            int rgb = MathHelper.hsvToRgb(hue, 0.62f, 1f);
+            float hue = ClickGuiModule.baseHue() + 0.01f + 0.13f * (float) (0.5 + 0.5 * Math.sin(t * 1.4 + i * 0.75));
+            int rgb = MathHelper.hsvToRgb(hue, ClickGuiModule.sat(), 1f);
             float k = Math.max(0f, 1f - Math.abs(i - shimmer) / 2.2f);
             int col = mix(rgb, 0xFFFFFF, k * 0.85f);
             float bob = (float) Math.sin(t * 2.0 + i * 0.5) * 0.8f;
@@ -138,7 +156,7 @@ public class ClickGuiScreen extends Screen {
         float sx = (width - sw) / 2f, sy = y + 28f;
         for (int i = 0; i < sub.length(); i++) {
             String ch = String.valueOf(sub.charAt(i));
-            float h = 0.5f + 0.1f * (float) Math.sin(t * 1.2 + i * 0.4);
+            float h = ClickGuiModule.baseHue() + 0.04f + 0.1f * (float) Math.sin(t * 1.2 + i * 0.4);
             scaledText(g, ch, sx, sy, ss, rgbArgb(h, 0.35f, 1f, 235), true);
             sx += textRenderer.getWidth(ch) * ss;
         }
@@ -159,7 +177,8 @@ public class ClickGuiScreen extends Screen {
         int x = p.x, y = p.y + (int) scroll;
 
         g.fill(x, y, x + W, y + HH, ac);
-        g.drawText(textRenderer, p.cat.label, x + (W - textRenderer.getWidth(p.cat.label)) / 2, y + 5, 0xFFFFFFFF, true);
+        String label = p.cat == null ? "Favorites" : p.cat.label;
+        g.drawText(textRenderer, label, x + (W - textRenderer.getWidth(label)) / 2, y + 5, 0xFFFFFFFF, true);
         hits.add(new Hit(x, y, W, HH, (a, b, btn) -> {
             if (btn == 0) { draggingPanel = p; dragX = a - p.x; dragY = b - (p.y + scroll); }
             else if (btn == 1) p.open = !p.open;
@@ -167,19 +186,21 @@ public class ClickGuiScreen extends Screen {
         if (!p.open) return;
 
         int cy = y + HH + 2;
-        for (ClientModule m : ModuleManager.in(p.cat)) {
+        List<ClientModule> mods = p.cat == null ? ModuleManager.MODULES.stream().filter(mm -> mm.favorite).toList() : ModuleManager.in(p.cat);
+        for (ClientModule m : mods) {
             if (!query.isEmpty() && !m.name.toLowerCase().contains(query.toLowerCase())) continue;
             boolean hover = mx >= x && mx < x + W && my >= cy && my < cy + MH;
             g.fill(x, cy, x + W, cy + MH, hover ? 0xE0202028 : 0xD8101014);
             if (m.enabled) g.fill(x, cy, x + 2, cy + MH, ac);
             g.drawText(textRenderer, m.enabled ? "-" : "+", x + 7, cy + 4, m.enabled ? ac : 0xFF8A8A8A, false);
+            if (m.favorite) g.drawText(textRenderer, "*", x + 13, cy + 4, 0xFFFFC857, false);
             g.drawText(textRenderer, m.name, x + 20, cy + 4, m.enabled ? 0xFFFFFFFF : 0xFF9A9A9A, false);
             if (!m.settings.isEmpty())
                 g.drawText(textRenderer, m.expanded ? "v" : ">", x + W - 10, cy + 4, 0xFFAAAAAA, false);
             String kl = binding == m ? "..." : (m.key >= 0 ? "[" + keyName(m.key) + "]" : null);
             if (kl != null) g.drawText(textRenderer, kl, x + W - 14 - textRenderer.getWidth(kl), cy + 4, 0xFF777788, false);
             hits.add(new Hit(x, cy, W, MH, (a, b, btn) -> {
-                if (btn == 0) m.toggle(); else if (btn == 1) m.expanded = !m.expanded;
+                if (btn == 0) { if (shiftDown()) m.favorite = !m.favorite; else m.toggle(); } else if (btn == 1) m.expanded = !m.expanded;
                 else if (btn == 2) binding = binding == m ? null : m;
             }, null));
             cy += MH;
